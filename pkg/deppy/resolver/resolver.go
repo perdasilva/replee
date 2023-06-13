@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"github.com/perdasilva/replee/pkg/deppy"
 	"github.com/perdasilva/replee/pkg/deppy/solver"
@@ -14,6 +15,22 @@ type Solution struct {
 	err       deppy.NotSatisfiable
 	selection map[deppy.Identifier]deppy.Variable
 	problem   deppy.ResolutionProblem
+}
+
+func (s *Solution) MarshalJSON() ([]byte, error) {
+	return json.Marshal(&struct {
+		Error     deppy.NotSatisfiable                `json:"error"`
+		Selection map[deppy.Identifier]deppy.Variable `json:"selection"`
+		Problem   deppy.ResolutionProblem             `json:"problem"`
+	}{
+		Error:     s.err,
+		Selection: s.selection,
+		Problem:   s.problem,
+	})
+}
+
+func (s *Solution) UnmarshalJSON(jsonBytes []byte) error {
+	return errors.New("not implemented")
 }
 
 // NotSatisfiable returns the resolution error in case the problem is unsat

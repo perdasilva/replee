@@ -6,21 +6,22 @@ import (
 	"sync"
 )
 
-var _ deppy.MutableConstraint = &MutableConstraint{}
-
-type MutableConstraint struct {
-	deppy.Constraint
+type mutableConstraint struct {
 	constraintID deppy.Identifier
 	kind         string
 	properties   map[string]interface{}
 	lock         sync.RWMutex
 }
 
-func (m *MutableConstraint) ConstraintID() deppy.Identifier {
+func (m *mutableConstraint) ConstraintID() deppy.Identifier {
 	return m.constraintID
 }
 
-func (m *MutableConstraint) Merge(other deppy.Constraint) error {
+func (m *mutableConstraint) Kind() string {
+	return m.kind
+}
+
+func (m *mutableConstraint) Merge(other deppy.Constraint) error {
 	for key, value := range other.GetProperties() {
 		if err := m.setProperty(key, value); err != nil {
 			return err
@@ -29,22 +30,21 @@ func (m *MutableConstraint) Merge(other deppy.Constraint) error {
 	return nil
 }
 
-func NewMutableConstraint(constraint deppy.Constraint) *MutableConstraint {
-	return &MutableConstraint{
-		Constraint: constraint,
+func NewMutableConstraint(constraint deppy.Constraint) *mutableConstraint {
+	return &mutableConstraint{
 		properties: map[string]interface{}{},
 		lock:       sync.RWMutex{},
 	}
 }
 
-func (m *MutableConstraint) GetProperty(key string) (interface{}, bool) {
+func (m *mutableConstraint) GetProperty(key string) (interface{}, bool) {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 	prop, ok := m.properties[key]
 	return prop, ok
 }
 
-func (m *MutableConstraint) GetProperties() map[string]interface{} {
+func (m *mutableConstraint) GetProperties() map[string]interface{} {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 	props := map[string]interface{}{}
@@ -54,23 +54,40 @@ func (m *MutableConstraint) GetProperties() map[string]interface{} {
 	return props
 }
 
-func (m *MutableConstraint) MarshalJSON() ([]byte, error) {
+func (m *mutableConstraint) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&struct {
-		Kind       string                 `json:"kind"`
-		Properties map[string]interface{} `json:"properties"`
+		ConstraintID deppy.Identifier       `json:"constraintID"`
+		Kind         string                 `json:"kind"`
+		Properties   map[string]interface{} `json:"properties"`
 	}{
-		Kind:       m.Kind(),
-		Properties: m.GetProperties(),
+		ConstraintID: m.ConstraintID(),
+		Kind:         m.Kind(),
+		Properties:   m.GetProperties(),
 	})
 }
 
-func (m *MutableConstraint) SetProperty(key string, value interface{}) error {
+func (m *mutableConstraint) UnmarshalJSON(jsonBytes []byte) error {
+	data := &struct {
+		ConstraintID deppy.Identifier       `json:"constraintID"`
+		Kind         string                 `json:"kind"`
+		Properties   map[string]interface{} `json:"properties"`
+	}{}
+	if err := json.Unmarshal(jsonBytes, data); err != nil {
+		return err
+	}
+	m.constraintID = data.ConstraintID
+	m.kind = data.Kind
+	m.properties = data.Properties
+	return nil
+}
+
+func (m *mutableConstraint) SetProperty(key string, value interface{}) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	return m.setProperty(key, value)
 }
 
-func (m *MutableConstraint) setProperty(key string, value interface{}) error {
+func (m *mutableConstraint) setProperty(key string, value interface{}) error {
 	if v, ok := m.properties[key]; ok {
 		if v == value {
 			return nil

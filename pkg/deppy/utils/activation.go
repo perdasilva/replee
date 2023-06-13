@@ -21,13 +21,14 @@ func NewActivationVariable[T any](value T) *ActivationValue[T] {
 }
 
 func (a *ActivationValue[T]) MarshalJSON() ([]byte, error) {
-	return json.Marshal(&struct {
+	bytes, err := json.Marshal(&struct {
 		Value       T    `json:"value"`
 		IsActivated bool `json:"activated"`
 	}{
 		Value:       a.value,
 		IsActivated: a.IsActivated(),
 	})
+	return bytes, err
 }
 
 func (a *ActivationValue[T]) UnmarshalJSON(jsonBytes []byte) error {
@@ -163,6 +164,7 @@ func (a *ActivationSet[T]) UnmarshalJSON(jsonBytes []byte) error {
 	if err := json.Unmarshal(jsonBytes, &data); err != nil {
 		return err
 	}
+	a.values = make(map[T]*ActivationValue[T], len(data))
 
 	for value, activated := range data {
 		a.Add(value)
@@ -184,6 +186,12 @@ func NewActivationMap[K comparable, V any]() *ActivationMap[K, V] {
 		values: map[K]*ActivationValue[V]{},
 		lock:   sync.RWMutex{},
 	}
+}
+
+func (a *ActivationMap[K, V]) Len() int {
+	a.lock.RLock()
+	defer a.lock.RUnlock()
+	return len(a.values)
 }
 
 func (a *ActivationMap[K, V]) Put(key K, value V) {
@@ -266,7 +274,8 @@ func (a *ActivationMap[K, V]) IsActivated(key K) (bool, error) {
 }
 
 func (a *ActivationMap[K, V]) MarshalJSON() ([]byte, error) {
-	return json.Marshal(a.values)
+	bytes, err := json.Marshal(a.values)
+	return bytes, err
 }
 
 func (a *ActivationMap[K, V]) UnmarshalJSON(jsonBytes []byte) error {
@@ -275,8 +284,12 @@ func (a *ActivationMap[K, V]) UnmarshalJSON(jsonBytes []byte) error {
 		return err
 	}
 
-	for key, value := range data {
-		a.values[key] = &value
+	if a.values == nil {
+		a.values = map[K]*ActivationValue[V]{}
+	}
+	for key, _ := range data {
+		val := data[key]
+		a.values[key] = &val
 	}
 
 	return nil

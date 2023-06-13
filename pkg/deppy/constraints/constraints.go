@@ -1,6 +1,7 @@
 package constraints
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/go-air/gini/z"
 	"github.com/perdasilva/replee/pkg/deppy"
@@ -17,18 +18,21 @@ const (
 	ConstraintKindAtMost     = "deppy.constraint.atmost"
 )
 
-var _ deppy.Constraint = &MutableConstraint{}
+type Constraint deppy.Constraint
+
+var _ deppy.Constraint = &MandatoryConstraint{}
 
 type MandatoryConstraint struct {
-	MutableConstraint
+	mutableConstraint
 }
 
-func Mandatory() *MandatoryConstraint {
+func Mandatory(constraintID deppy.Identifier) *MandatoryConstraint {
 	return &MandatoryConstraint{
-		MutableConstraint: MutableConstraint{
-			kind:       ConstraintKindMandatory,
-			properties: map[string]interface{}{},
-			lock:       sync.RWMutex{},
+		mutableConstraint: mutableConstraint{
+			constraintID: constraintID,
+			kind:         ConstraintKindMandatory,
+			properties:   map[string]interface{}{},
+			lock:         sync.RWMutex{},
 		},
 	}
 }
@@ -50,35 +54,38 @@ func (constraint *MandatoryConstraint) Anchor() bool {
 }
 
 func (constraint *MandatoryConstraint) Merge(other deppy.Constraint) error {
-	if err := constraint.MutableConstraint.Merge(other); err != nil {
-		return err
-	}
 	if _, ok := other.(*MandatoryConstraint); !ok {
 		return deppy.ConflictErrorf("cannot merge constraints of different kind [%T != %T]", constraint, other)
+	}
+	if err := constraint.mutableConstraint.Merge(other); err != nil {
+		return err
 	}
 	return nil
 }
 
+var _ deppy.Constraint = &ProhibitedConstraint{}
+
 type ProhibitedConstraint struct {
-	MutableConstraint
+	mutableConstraint
 }
 
-func Prohibited() *ProhibitedConstraint {
+func Prohibited(constraintID deppy.Identifier) *ProhibitedConstraint {
 	return &ProhibitedConstraint{
-		MutableConstraint: MutableConstraint{
-			kind:       ConstraintKindProhibited,
-			properties: map[string]interface{}{},
-			lock:       sync.RWMutex{},
+		mutableConstraint: mutableConstraint{
+			constraintID: constraintID,
+			kind:         ConstraintKindProhibited,
+			properties:   map[string]interface{}{},
+			lock:         sync.RWMutex{},
 		},
 	}
 }
 
 func (constraint *ProhibitedConstraint) Merge(other deppy.Constraint) error {
-	if err := constraint.MutableConstraint.Merge(other); err != nil {
-		return err
-	}
 	if _, ok := other.(*ProhibitedConstraint); !ok {
 		return deppy.ConflictErrorf("cannot merge constraints of different kind [%T != %T]", constraint, other)
+	}
+	if err := constraint.mutableConstraint.Merge(other); err != nil {
+		return err
 	}
 	return nil
 }
@@ -99,32 +106,35 @@ func (constraint *ProhibitedConstraint) Anchor() bool {
 	return false
 }
 
+var _ deppy.Constraint = &ConflictConstraint{}
+
 type ConflictConstraint struct {
-	MutableConstraint
+	mutableConstraint
 	conflictingVariableID deppy.Identifier
 	lock                  sync.RWMutex
 }
 
-func Conflict(conflict deppy.Identifier) *ConflictConstraint {
+func Conflict(constraintID deppy.Identifier, conflict deppy.Identifier) *ConflictConstraint {
 	return &ConflictConstraint{
-		MutableConstraint: MutableConstraint{
-			kind:       ConstraintKindConflict,
-			properties: map[string]interface{}{},
-			lock:       sync.RWMutex{},
+		mutableConstraint: mutableConstraint{
+			constraintID: constraintID,
+			kind:         ConstraintKindConflict,
+			properties:   map[string]interface{}{},
+			lock:         sync.RWMutex{},
 		},
 		conflictingVariableID: conflict,
 	}
 }
 
 func (constraint *ConflictConstraint) Merge(other deppy.Constraint) error {
-	if err := constraint.MutableConstraint.Merge(other); err != nil {
-		return err
-	}
 	if cc, ok := other.(*ConflictConstraint); ok {
 		if cc.conflictingVariableID != constraint.conflictingVariableID {
 			return deppy.ConflictErrorf("cannot merge constraints with different conflicting variable [%s != %s]", constraint.conflictingVariableID, cc.conflictingVariableID)
 		}
 		return nil
+	}
+	if err := constraint.mutableConstraint.Merge(other); err != nil {
+		return err
 	}
 	return deppy.ConflictErrorf("cannot merge constraints of different kind [%T != %T]", constraint, other)
 }
@@ -155,19 +165,49 @@ func (constraint *ConflictConstraint) SetConflictingVariableID(id deppy.Identifi
 	return deppy.FatalError("conflicting variable id already set")
 }
 
-type DependencyConstraint struct {
-	MutableConstraint
-	utils.ActivationSet[deppy.Identifier]
+func (constraint *ConflictConstraint) MarshalJSON() ([]byte, error) {
+	return json.Marshal(&struct {
+		Kind               string                 `json:"kind"`
+		Properties         map[string]interface{} `json:"properties"`
+		ConflictVariableID deppy.Identifier       `json:"conflictVariableID"`
+	}{
+		Kind:               constraint.Kind(),
+		Properties:         constraint.GetProperties(),
+		ConflictVariableID: constraint.conflictingVariableID,
+	})
 }
 
-func Dependency(dependencies ...deppy.Identifier) *DependencyConstraint {
+func (constraint *ConflictConstraint) UnmarshalJSON(jsonBytes []byte) error {
+	data := &struct {
+		Kind               string                 `json:"kind"`
+		Properties         map[string]interface{} `json:"properties"`
+		ConflictVariableID deppy.Identifier       `json:"conflictVariableID"`
+	}{}
+	if err := json.Unmarshal(jsonBytes, data); err != nil {
+		return err
+	}
+	constraint.kind = data.Kind
+	constraint.properties = data.Properties
+	constraint.conflictingVariableID = data.ConflictVariableID
+	return nil
+}
+
+var _ deppy.Constraint = &DependencyConstraint{}
+
+type DependencyConstraint struct {
+	mutableConstraint
+	*utils.ActivationSet[deppy.Identifier]
+}
+
+func Dependency(constraintID deppy.Identifier, dependencies ...deppy.Identifier) *DependencyConstraint {
 	c := &DependencyConstraint{
-		MutableConstraint: MutableConstraint{
-			kind:       ConstraintKindDependency,
-			properties: map[string]interface{}{},
-			lock:       sync.RWMutex{},
+		mutableConstraint: mutableConstraint{
+			constraintID: constraintID,
+			kind:         ConstraintKindDependency,
+			properties:   map[string]interface{}{},
+			lock:         sync.RWMutex{},
 		},
-		ActivationSet: *utils.NewActivationSet[deppy.Identifier](),
+		ActivationSet: utils.NewActivationSet[deppy.Identifier](),
 	}
 	for _, dependency := range dependencies {
 		c.Activate(dependency)
@@ -175,25 +215,27 @@ func Dependency(dependencies ...deppy.Identifier) *DependencyConstraint {
 	return c
 }
 
-func (d *DependencyConstraint) Merge(other deppy.Constraint) error {
-	if err := d.MutableConstraint.Merge(other); err != nil {
-		return err
-	}
+func (constraint *DependencyConstraint) Merge(other deppy.Constraint) error {
 	if cc, ok := other.(*DependencyConstraint); ok {
+		if constraint.ActivationSet == nil {
+			constraint.ActivationSet = utils.NewActivationSet[deppy.Identifier]()
+		}
 		for _, element := range cc.Elements() {
 			if active, _ := cc.IsActivated(element); active {
-				d.Activate(element)
+				constraint.Activate(element)
 			} else {
-				d.Deactivate(element)
+				constraint.Deactivate(element)
 			}
 		}
 		return nil
+	} else if !ok {
+		return deppy.ConflictErrorf("cannot merge constraints of different kind [%T != %T]", constraint, other)
 	}
-	return deppy.ConflictErrorf("cannot merge constraints of different kind [%T != %T]", d, other)
+	return constraint.mutableConstraint.Merge(other)
 }
 
-func (d *DependencyConstraint) Apply(lm deppy.LitMapping, subject deppy.Identifier) z.Lit {
-	dependencyIDs := d.Elements()
+func (constraint *DependencyConstraint) Apply(lm deppy.LitMapping, subject deppy.Identifier) z.Lit {
+	dependencyIDs := constraint.Elements()
 	m := lm.LitOf(subject).Not()
 	for _, each := range dependencyIDs {
 		m = lm.LogicCircuit().Or(m, lm.LitOf(each))
@@ -201,16 +243,16 @@ func (d *DependencyConstraint) Apply(lm deppy.LitMapping, subject deppy.Identifi
 	return m
 }
 
-func (d *DependencyConstraint) Order() []deppy.Identifier {
-	return d.Elements()
+func (constraint *DependencyConstraint) Order() []deppy.Identifier {
+	return constraint.Elements()
 }
 
-func (d *DependencyConstraint) Anchor() bool {
+func (constraint *DependencyConstraint) Anchor() bool {
 	return false
 }
 
-func (d *DependencyConstraint) String(subject deppy.Identifier) string {
-	dependencyIDs := d.Elements()
+func (constraint *DependencyConstraint) String(subject deppy.Identifier) string {
+	dependencyIDs := constraint.Elements()
 	if len(dependencyIDs) == 0 {
 		return fmt.Sprintf("%s has a DependencyConstraint without any candidates to satisfy it", subject)
 	}
@@ -221,21 +263,51 @@ func (d *DependencyConstraint) String(subject deppy.Identifier) string {
 	return fmt.Sprintf("%s requires at least one of %s", subject, strings.Join(s, ", "))
 }
 
+func (constraint *DependencyConstraint) MarshalJSON() ([]byte, error) {
+	return json.Marshal(&struct {
+		Kind          string                                 `json:"kind"`
+		Properties    map[string]interface{}                 `json:"properties"`
+		DependencyIDs *utils.ActivationSet[deppy.Identifier] `json:"dependencyIDs"`
+	}{
+		Kind:          constraint.Kind(),
+		Properties:    constraint.GetProperties(),
+		DependencyIDs: constraint.ActivationSet,
+	})
+}
+
+func (constraint *DependencyConstraint) UnmarshalJSON(jsonBytes []byte) error {
+	data := &struct {
+		Kind          string                                 `json:"kind"`
+		Properties    map[string]interface{}                 `json:"properties"`
+		DependencyIDs *utils.ActivationSet[deppy.Identifier] `json:"dependencyIDs"`
+	}{}
+	if err := json.Unmarshal(jsonBytes, data); err != nil {
+		return err
+	}
+	constraint.kind = data.Kind
+	constraint.properties = data.Properties
+	constraint.ActivationSet = data.DependencyIDs
+	return nil
+}
+
+var _ deppy.Constraint = &AtMostConstraint{}
+
 type AtMostConstraint struct {
-	MutableConstraint
-	utils.ActivationSet[deppy.Identifier]
+	mutableConstraint
+	*utils.ActivationSet[deppy.Identifier]
 	n    int
 	lock sync.RWMutex
 }
 
-func AtMost(n int, variables ...deppy.Identifier) *AtMostConstraint {
+func AtMost(constraintID deppy.Identifier, n int, variables ...deppy.Identifier) *AtMostConstraint {
 	c := &AtMostConstraint{
-		MutableConstraint: MutableConstraint{
-			kind:       ConstraintKindAtMost,
-			properties: map[string]interface{}{},
-			lock:       sync.RWMutex{},
+		mutableConstraint: mutableConstraint{
+			constraintID: constraintID,
+			kind:         ConstraintKindAtMost,
+			properties:   map[string]interface{}{},
+			lock:         sync.RWMutex{},
 		},
-		ActivationSet: *utils.NewActivationSet[deppy.Identifier](),
+		ActivationSet: utils.NewActivationSet[deppy.Identifier](),
 		n:             n,
 	}
 	for _, variable := range variables {
@@ -244,64 +316,94 @@ func AtMost(n int, variables ...deppy.Identifier) *AtMostConstraint {
 	return c
 }
 
-func (a *AtMostConstraint) Merge(other deppy.Constraint) error {
-	if err := a.MutableConstraint.Merge(other); err != nil {
-		return err
-	}
+func (constraint *AtMostConstraint) Merge(other deppy.Constraint) error {
 	if cc, ok := other.(*AtMostConstraint); ok {
-		if a.n != -1 && cc.n != -1 && a.n != cc.n {
-			return deppy.ConflictErrorf("cannot merge constraints with different n [%d != %d]", a.n, cc.n)
+		if constraint.n != -1 && cc.n != -1 && constraint.n != cc.n {
+			return deppy.ConflictErrorf("cannot merge constraints with different n [%d != %d]", constraint.n, cc.n)
 		}
-		if a.n == -1 {
-			a.n = cc.n
+		if constraint.n == -1 {
+			constraint.n = cc.n
 		}
 		for _, element := range cc.Elements() {
 			if active, _ := cc.IsActivated(element); active {
-				a.Activate(element)
+				constraint.Activate(element)
 			} else {
-				a.Deactivate(element)
+				constraint.Deactivate(element)
 			}
 		}
 		return nil
+	} else if !ok {
+		return deppy.ConflictErrorf("cannot merge constraints of different kind [%T != %T]", constraint, other)
 	}
-	return deppy.ConflictErrorf("cannot merge constraints of different kind [%T != %T]", a, other)
+	return constraint.mutableConstraint.Merge(other)
 }
 
-func (a *AtMostConstraint) Apply(lm deppy.LitMapping, _ deppy.Identifier) z.Lit {
-	ids := a.Elements()
+func (constraint *AtMostConstraint) Apply(lm deppy.LitMapping, _ deppy.Identifier) z.Lit {
+	ids := constraint.Elements()
 	ms := make([]z.Lit, len(ids))
 	for i, each := range ids {
 		ms[i] = lm.LitOf(each)
 	}
-	return lm.LogicCircuit().CardSort(ms).Leq(a.n)
+	return lm.LogicCircuit().CardSort(ms).Leq(constraint.n)
 }
 
-func (a *AtMostConstraint) Order() []deppy.Identifier {
-	return a.Elements()
+func (constraint *AtMostConstraint) Order() []deppy.Identifier {
+	return constraint.Elements()
 }
 
-func (a *AtMostConstraint) Anchor() bool {
+func (constraint *AtMostConstraint) Anchor() bool {
 	return false
 }
 
-func (a *AtMostConstraint) String(subject deppy.Identifier) string {
-	ids := a.Elements()
+func (constraint *AtMostConstraint) String(subject deppy.Identifier) string {
+	ids := constraint.Elements()
 	s := make([]string, len(ids))
 	for i, each := range ids {
 		s[i] = string(each)
 	}
-	return fmt.Sprintf("%s permits at most %d of %s", subject, a.n, strings.Join(s, ", "))
+	return fmt.Sprintf("%s permits at most %d of %s", subject, constraint.n, strings.Join(s, ", "))
 }
 
-func (a *AtMostConstraint) SetN(n int) error {
-	a.lock.Lock()
-	defer a.lock.Unlock()
+func (constraint *AtMostConstraint) SetN(n int) error {
+	constraint.lock.Lock()
+	defer constraint.lock.Unlock()
 	if n < 0 {
 		return deppy.FatalError("n must be greater than or equal to 0")
 	}
-	if a.n > 0 {
-		return deppy.FatalError(fmt.Sprintf("n is already set to %d", a.n))
+	if constraint.n > 0 {
+		return deppy.FatalError(fmt.Sprintf("n is already set to %d", constraint.n))
 	}
-	a.n = n
+	constraint.n = n
+	return nil
+}
+
+func (constraint *AtMostConstraint) MarshalJSON() ([]byte, error) {
+	return json.Marshal(&struct {
+		Kind       string                                 `json:"kind"`
+		Properties map[string]interface{}                 `json:"properties"`
+		Variables  *utils.ActivationSet[deppy.Identifier] `json:"variables"`
+		N          int                                    `json:"n"`
+	}{
+		Kind:       constraint.Kind(),
+		Properties: constraint.GetProperties(),
+		Variables:  constraint.ActivationSet,
+		N:          constraint.n,
+	})
+}
+
+func (constraint *AtMostConstraint) UnmarshalJSON(jsonBytes []byte) error {
+	data := &struct {
+		Kind       string                                 `json:"kind"`
+		Properties map[string]interface{}                 `json:"properties"`
+		Variables  *utils.ActivationSet[deppy.Identifier] `json:"variables"`
+		N          int                                    `json:"n"`
+	}{}
+	if err := json.Unmarshal(jsonBytes, data); err != nil {
+		return err
+	}
+	constraint.kind = data.Kind
+	constraint.properties = data.Properties
+	constraint.ActivationSet = data.Variables
+	constraint.n = data.N
 	return nil
 }

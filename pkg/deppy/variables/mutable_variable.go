@@ -1,6 +1,7 @@
 package variables
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/perdasilva/replee/pkg/deppy"
 	"github.com/perdasilva/replee/pkg/deppy/constraints"
@@ -16,7 +17,7 @@ type MutableVariable struct {
 	kind        string
 	lock        sync.RWMutex
 	properties  map[string]interface{}
-	constraints utils.ActivationMap[deppy.Identifier, deppy.Constraint]
+	constraints *utils.ActivationMap[deppy.Identifier, deppy.Constraint]
 }
 
 func (v *MutableVariable) GetConstraint(constraintID deppy.Identifier) (deppy.Constraint, bool) {
@@ -47,7 +48,7 @@ func (v *MutableVariable) Merge(other deppy.Variable) error {
 		oc, _ := other.GetConstraint(constraintID)
 		if !v.HasConstraint(constraintID) {
 			v.constraints.Put(constraintID, oc)
-			if isActivated, err := v.IsActivated(constraintID); !isActivated && err == nil {
+			if isActivated, err := other.IsActivated(constraintID); !isActivated && err == nil {
 				v.constraints.Deactivate(constraintID)
 			}
 		} else {
@@ -73,7 +74,7 @@ func NewMutableVariable(variableID deppy.Identifier, kind string, properties map
 		variableID:  variableID,
 		kind:        kind,
 		properties:  properties,
-		constraints: *utils.NewActivationMap[deppy.Identifier, deppy.Constraint](),
+		constraints: utils.NewActivationMap[deppy.Identifier, deppy.Constraint](),
 		lock:        sync.RWMutex{},
 	}
 }
@@ -130,7 +131,7 @@ func (v *MutableVariable) AddMandatory(constraintID deppy.Identifier) error {
 	v.lock.Lock()
 	defer v.lock.Unlock()
 	if _, ok := v.constraints.GetValue(constraintID); !ok {
-		v.constraints.Put(constraintID, constraints.Mandatory())
+		v.constraints.Put(constraintID, constraints.Mandatory(constraintID))
 	}
 	v.constraints.Activate(constraintID)
 	return nil
@@ -140,7 +141,7 @@ func (v *MutableVariable) RemoveMandatory(constraintID deppy.Identifier) error {
 	v.lock.Lock()
 	defer v.lock.Unlock()
 	if _, ok := v.constraints.GetValue(constraintID); !ok {
-		v.constraints.Put(constraintID, constraints.Mandatory())
+		v.constraints.Put(constraintID, constraints.Mandatory(constraintID))
 	}
 	v.constraints.Deactivate(constraintID)
 	return nil
@@ -150,7 +151,7 @@ func (v *MutableVariable) AddProhibited(constraintID deppy.Identifier) error {
 	v.lock.Lock()
 	defer v.lock.Unlock()
 	if _, ok := v.constraints.GetValue(constraintID); !ok {
-		v.constraints.Put(constraintID, constraints.Prohibited())
+		v.constraints.Put(constraintID, constraints.Prohibited(constraintID))
 	}
 	v.constraints.Activate(constraintID)
 	return nil
@@ -160,7 +161,7 @@ func (v *MutableVariable) RemoveProhibited(constraintID deppy.Identifier) error 
 	v.lock.Lock()
 	defer v.lock.Unlock()
 	if _, ok := v.constraints.GetValue(constraintID); !ok {
-		v.constraints.Put(constraintID, constraints.Prohibited())
+		v.constraints.Put(constraintID, constraints.Prohibited(constraintID))
 	}
 	v.constraints.Deactivate(constraintID)
 	return nil
@@ -170,7 +171,7 @@ func (v *MutableVariable) AddConflict(constraintID deppy.Identifier, conflicting
 	v.lock.Lock()
 	defer v.lock.Unlock()
 	if c, ok := v.constraints.GetValue(constraintID); !ok {
-		v.constraints.Put(constraintID, constraints.Conflict(conflictingVariableID))
+		v.constraints.Put(constraintID, constraints.Conflict(constraintID, conflictingVariableID))
 	} else if _, ok := c.(*constraints.ConflictConstraint); !ok {
 		return deppy.FatalError(fmt.Sprintf("constraint with id %s is not a Conflict constraint", constraintID))
 	}
@@ -186,7 +187,7 @@ func (v *MutableVariable) RemoveConflict(constraintID deppy.Identifier) error {
 	v.lock.Lock()
 	defer v.lock.Unlock()
 	if c, ok := v.constraints.GetValue(constraintID); !ok {
-		v.constraints.Put(constraintID, constraints.Conflict(""))
+		v.constraints.Put(constraintID, constraints.Conflict(constraintID, ""))
 	} else if _, ok := c.(*constraints.ConflictConstraint); !ok {
 		return deppy.FatalError(fmt.Sprintf("constraint with id %s is not a Conflict constraint", constraintID))
 	}
@@ -198,7 +199,7 @@ func (v *MutableVariable) AddDependency(constraintID deppy.Identifier, dependent
 	v.lock.Lock()
 	defer v.lock.Unlock()
 	if _, ok := v.constraints.GetValue(constraintID); !ok {
-		dep := constraints.Dependency(dependentVariableIDs...)
+		dep := constraints.Dependency(constraintID, dependentVariableIDs...)
 		v.constraints.Put(constraintID, dep)
 	}
 
@@ -214,7 +215,7 @@ func (v *MutableVariable) RemoveDependencyConstraint(constraintID deppy.Identifi
 	v.lock.Lock()
 	defer v.lock.Unlock()
 	if c, ok := v.constraints.GetValue(constraintID); !ok {
-		v.constraints.Put(constraintID, constraints.Dependency())
+		v.constraints.Put(constraintID, constraints.Dependency(constraintID))
 	} else if _, ok := c.(*constraints.DependencyConstraint); !ok {
 		return deppy.FatalError(fmt.Sprintf("constraint with id %s is not a Dependency constraint", constraintID))
 	}
@@ -226,7 +227,7 @@ func (v *MutableVariable) RemoveDependency(constraintID deppy.Identifier, depend
 	v.lock.Lock()
 	defer v.lock.Unlock()
 	if _, ok := v.constraints.GetValue(constraintID); !ok {
-		dep := constraints.Dependency()
+		dep := constraints.Dependency(constraintID)
 		v.constraints.Put(constraintID, dep)
 	}
 
@@ -250,7 +251,7 @@ func (v *MutableVariable) AddAtMost(constraintID deppy.Identifier, n int, variab
 	v.lock.Lock()
 	defer v.lock.Unlock()
 	if _, ok := v.constraints.GetValue(constraintID); !ok {
-		atMost := constraints.AtMost(n, variableIDs...)
+		atMost := constraints.AtMost(constraintID, n, variableIDs...)
 		v.constraints.Put(constraintID, atMost)
 	}
 
@@ -267,7 +268,7 @@ func (v *MutableVariable) RemoveAtMost(constraintID deppy.Identifier, variableID
 	v.lock.Lock()
 	defer v.lock.Unlock()
 	if _, ok := v.constraints.GetValue(constraintID); !ok {
-		atMost := constraints.AtMost(-1)
+		atMost := constraints.AtMost(constraintID, -1)
 		v.constraints.Put(constraintID, atMost)
 	}
 
@@ -285,7 +286,7 @@ func (v *MutableVariable) SetAtMostN(constraintID deppy.Identifier, n int) error
 	var atMost *constraints.AtMostConstraint
 	c, ok := v.constraints.GetValue(constraintID)
 	if !ok {
-		atMost = constraints.AtMost(n)
+		atMost = constraints.AtMost(constraintID, n)
 		v.constraints.Put(constraintID, atMost)
 	} else {
 		var ok bool
@@ -307,6 +308,68 @@ func (v *MutableVariable) HasConstraint(constraintID deppy.Identifier) bool {
 
 func (v *MutableVariable) IsActivated(constraintID deppy.Identifier) (bool, error) {
 	return v.constraints.IsActivated(constraintID)
+}
+
+func (v *MutableVariable) MarshalJSON() ([]byte, error) {
+	return json.Marshal(&struct {
+		VariableID  deppy.Identifier                                         `json:"variableID"`
+		Kind        string                                                   `json:"kind"`
+		Properties  map[string]interface{}                                   `json:"properties"`
+		Constraints *utils.ActivationMap[deppy.Identifier, deppy.Constraint] `json:"constraints"`
+	}{
+		VariableID:  v.variableID,
+		Kind:        v.kind,
+		Properties:  v.properties,
+		Constraints: v.constraints,
+	})
+}
+
+func (v *MutableVariable) UnmarshalJSON(jsonBytes []byte) error {
+	data := &struct {
+		VariableID  deppy.Identifier                                        `json:"variableID"`
+		Kind        string                                                  `json:"kind"`
+		Properties  map[string]interface{}                                  `json:"properties"`
+		Constraints *utils.ActivationMap[deppy.Identifier, json.RawMessage] `json:"constraints"`
+	}{}
+	if err := json.Unmarshal(jsonBytes, data); err != nil {
+		return err
+	}
+	v.variableID = data.VariableID
+	v.kind = data.Kind
+	v.properties = data.Properties
+	v.constraints = utils.NewActivationMap[deppy.Identifier, deppy.Constraint]()
+	for _, constraintID := range data.Constraints.Keys() {
+		constraintBytes, _ := data.Constraints.GetValue(constraintID)
+		mc := constraints.NewMutableConstraint(nil)
+		if err := json.Unmarshal(constraintBytes, mc); err != nil {
+			return err
+		}
+		var c deppy.Constraint
+		switch mc.Kind() {
+		case constraints.ConstraintKindMandatory:
+			c = &constraints.MandatoryConstraint{}
+		case constraints.ConstraintKindProhibited:
+			c = &constraints.ProhibitedConstraint{}
+		case constraints.ConstraintKindConflict:
+			c = &constraints.ConflictConstraint{}
+		case constraints.ConstraintKindDependency:
+			c = &constraints.DependencyConstraint{}
+		case constraints.ConstraintKindAtMost:
+			c = &constraints.AtMostConstraint{}
+		default:
+			return deppy.Fatalf("unknown constraint kind %s", mc.Kind())
+		}
+		if err := json.Unmarshal(constraintBytes, &c); err != nil {
+			return err
+		}
+		v.constraints.Put(constraintID, c)
+		if activated, err := data.Constraints.IsActivated(constraintID); err != nil {
+			return nil
+		} else if !activated {
+			v.constraints.Deactivate(constraintID)
+		}
+	}
+	return nil
 }
 
 //func (v *MutableVariable) RemoveConflictWithAny(constraintID deppy.Identifier, variableIDs ...deppy.Identifier) error {

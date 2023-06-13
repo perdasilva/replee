@@ -25,7 +25,7 @@ func Fatalf(format string, args ...interface{}) FatalError {
 type ConflictError FatalError
 
 func (v ConflictError) Error() string {
-	return v.Error()
+	return string(v)
 }
 
 func ConflictErrorf(format string, args ...interface{}) ConflictError {

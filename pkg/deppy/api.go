@@ -2,6 +2,7 @@ package deppy
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/go-air/gini/logic"
 	"github.com/go-air/gini/z"
@@ -32,6 +33,22 @@ func (id Identifier) String() string {
 	return string(id)
 }
 
+func (id Identifier) MarshalJSON() ([]byte, error) {
+	return json.Marshal(id.String())
+}
+
+func (id *Identifier) UnmarshalJSON(jsonBytes []byte) error {
+	if id == nil {
+		panic("nil identifier")
+	}
+	var value string
+	if err := json.Unmarshal(jsonBytes, &value); err != nil {
+		return err
+	}
+	*id = Identifier(value)
+	return nil
+}
+
 func Identifierf(format string, args ...interface{}) Identifier {
 	return Identifier(fmt.Sprintf(format, args...))
 }
@@ -58,6 +75,8 @@ type Variable interface {
 	Kind() string
 	GetProperty(key string) (interface{}, bool)
 	GetProperties() map[string]interface{}
+
+	IsActivated(constraintID Identifier) (bool, error)
 }
 
 type MutableVariable interface {

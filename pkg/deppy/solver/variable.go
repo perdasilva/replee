@@ -7,6 +7,10 @@ import (
 // zeroVariable is returned by VariableOf in error cases.
 type zeroVariable struct{}
 
+func (v zeroVariable) IsActivated(constraintID deppy.Identifier) (bool, error) {
+	return false, nil
+}
+
 func (v zeroVariable) GetConstraint(constraintID deppy.Identifier) (deppy.Constraint, bool) {
 	return nil, false
 }

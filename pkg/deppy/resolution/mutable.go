@@ -1,6 +1,7 @@
 package resolution
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/perdasilva/replee/pkg/deppy"
 	"github.com/perdasilva/replee/pkg/deppy/utils"
@@ -19,6 +20,45 @@ func NewMutableResolutionProblem(resolutionProblemID deppy.Identifier) *MutableR
 		resolutionProblemID: resolutionProblemID,
 		variables:           utils.NewActivationMap[deppy.Identifier, deppy.MutableVariable](),
 	}
+}
+
+func (m *MutableResolutionProblem) MarshalJSON() ([]byte, error) {
+	bytes, err := json.Marshal(&struct {
+		ResolutionProblemID deppy.Identifier                                              `json:"resolutionProblemID"`
+		Variables           *utils.ActivationMap[deppy.Identifier, deppy.MutableVariable] `json:"variables"`
+	}{
+		ResolutionProblemID: m.resolutionProblemID,
+		Variables:           m.variables,
+	})
+	return bytes, err
+}
+
+func (m *MutableResolutionProblem) UnmarshalJSON(jsonBytes []byte) error {
+	data := &struct {
+		ResolutionProblemID deppy.Identifier                                        `json:"resolutionProblemID"`
+		Variables           *utils.ActivationMap[deppy.Identifier, json.RawMessage] `json:"variables"`
+	}{}
+	if err := json.Unmarshal(jsonBytes, data); err != nil {
+		return err
+	}
+	m.resolutionProblemID = data.ResolutionProblemID
+	m.variables = utils.NewActivationMap[deppy.Identifier, deppy.MutableVariable]()
+	varIDs := data.Variables.Keys()
+	for i := 0; i < len(varIDs); i++ {
+		variableID := varIDs[i]
+		variable := variables.NewMutableVariable(variableID, "", nil)
+		variableJSON, _ := data.Variables.GetValue(variableID)
+		if err := json.Unmarshal(variableJSON, variable); err != nil {
+			return err
+		}
+		m.variables.Put(variableID, variable)
+		if activated, err := data.Variables.IsActivated(variableID); err != nil {
+			return err
+		} else if !activated {
+			m.variables.Deactivate(variableID)
+		}
+	}
+	return nil
 }
 
 func (m *MutableResolutionProblem) GetVariable(variableID deppy.Identifier, kind string) (deppy.Variable, error) {
