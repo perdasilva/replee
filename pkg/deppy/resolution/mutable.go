@@ -22,6 +22,14 @@ func NewMutableResolutionProblem(resolutionProblemID deppy.Identifier) *MutableR
 	}
 }
 
+func (m *MutableResolutionProblem) String() string {
+	str, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return fmt.Sprintf("error marshaling resolution problem: %s", err)
+	}
+	return string(str)
+}
+
 func (m *MutableResolutionProblem) MarshalJSON() ([]byte, error) {
 	bytes, err := json.Marshal(&struct {
 		ResolutionProblemID deppy.Identifier                                              `json:"resolutionProblemID"`

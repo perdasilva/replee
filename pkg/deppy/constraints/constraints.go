@@ -23,12 +23,12 @@ type Constraint deppy.Constraint
 var _ deppy.Constraint = &MandatoryConstraint{}
 
 type MandatoryConstraint struct {
-	mutableConstraint
+	MutableConstraintBase
 }
 
 func Mandatory(constraintID deppy.Identifier) *MandatoryConstraint {
 	return &MandatoryConstraint{
-		mutableConstraint: mutableConstraint{
+		MutableConstraintBase: MutableConstraintBase{
 			constraintID: constraintID,
 			kind:         ConstraintKindMandatory,
 			properties:   map[string]interface{}{},
@@ -57,7 +57,7 @@ func (constraint *MandatoryConstraint) Merge(other deppy.Constraint) error {
 	if _, ok := other.(*MandatoryConstraint); !ok {
 		return deppy.ConflictErrorf("cannot merge constraints of different kind [%T != %T]", constraint, other)
 	}
-	if err := constraint.mutableConstraint.Merge(other); err != nil {
+	if err := constraint.MutableConstraintBase.Merge(other); err != nil {
 		return err
 	}
 	return nil
@@ -66,12 +66,12 @@ func (constraint *MandatoryConstraint) Merge(other deppy.Constraint) error {
 var _ deppy.Constraint = &ProhibitedConstraint{}
 
 type ProhibitedConstraint struct {
-	mutableConstraint
+	MutableConstraintBase
 }
 
 func Prohibited(constraintID deppy.Identifier) *ProhibitedConstraint {
 	return &ProhibitedConstraint{
-		mutableConstraint: mutableConstraint{
+		MutableConstraintBase: MutableConstraintBase{
 			constraintID: constraintID,
 			kind:         ConstraintKindProhibited,
 			properties:   map[string]interface{}{},
@@ -84,7 +84,7 @@ func (constraint *ProhibitedConstraint) Merge(other deppy.Constraint) error {
 	if _, ok := other.(*ProhibitedConstraint); !ok {
 		return deppy.ConflictErrorf("cannot merge constraints of different kind [%T != %T]", constraint, other)
 	}
-	if err := constraint.mutableConstraint.Merge(other); err != nil {
+	if err := constraint.MutableConstraintBase.Merge(other); err != nil {
 		return err
 	}
 	return nil
@@ -109,14 +109,14 @@ func (constraint *ProhibitedConstraint) Anchor() bool {
 var _ deppy.Constraint = &ConflictConstraint{}
 
 type ConflictConstraint struct {
-	mutableConstraint
+	MutableConstraintBase
 	conflictingVariableID deppy.Identifier
 	lock                  sync.RWMutex
 }
 
 func Conflict(constraintID deppy.Identifier, conflict deppy.Identifier) *ConflictConstraint {
 	return &ConflictConstraint{
-		mutableConstraint: mutableConstraint{
+		MutableConstraintBase: MutableConstraintBase{
 			constraintID: constraintID,
 			kind:         ConstraintKindConflict,
 			properties:   map[string]interface{}{},
@@ -133,7 +133,7 @@ func (constraint *ConflictConstraint) Merge(other deppy.Constraint) error {
 		}
 		return nil
 	}
-	if err := constraint.mutableConstraint.Merge(other); err != nil {
+	if err := constraint.MutableConstraintBase.Merge(other); err != nil {
 		return err
 	}
 	return deppy.ConflictErrorf("cannot merge constraints of different kind [%T != %T]", constraint, other)
@@ -195,13 +195,13 @@ func (constraint *ConflictConstraint) UnmarshalJSON(jsonBytes []byte) error {
 var _ deppy.Constraint = &DependencyConstraint{}
 
 type DependencyConstraint struct {
-	mutableConstraint
+	MutableConstraintBase
 	*utils.ActivationSet[deppy.Identifier]
 }
 
 func Dependency(constraintID deppy.Identifier, dependencies ...deppy.Identifier) *DependencyConstraint {
 	c := &DependencyConstraint{
-		mutableConstraint: mutableConstraint{
+		MutableConstraintBase: MutableConstraintBase{
 			constraintID: constraintID,
 			kind:         ConstraintKindDependency,
 			properties:   map[string]interface{}{},
@@ -231,7 +231,7 @@ func (constraint *DependencyConstraint) Merge(other deppy.Constraint) error {
 	} else if !ok {
 		return deppy.ConflictErrorf("cannot merge constraints of different kind [%T != %T]", constraint, other)
 	}
-	return constraint.mutableConstraint.Merge(other)
+	return constraint.MutableConstraintBase.Merge(other)
 }
 
 func (constraint *DependencyConstraint) Apply(lm deppy.LitMapping, subject deppy.Identifier) z.Lit {
@@ -293,7 +293,7 @@ func (constraint *DependencyConstraint) UnmarshalJSON(jsonBytes []byte) error {
 var _ deppy.Constraint = &AtMostConstraint{}
 
 type AtMostConstraint struct {
-	mutableConstraint
+	MutableConstraintBase
 	*utils.ActivationSet[deppy.Identifier]
 	n    int
 	lock sync.RWMutex
@@ -301,7 +301,7 @@ type AtMostConstraint struct {
 
 func AtMost(constraintID deppy.Identifier, n int, variables ...deppy.Identifier) *AtMostConstraint {
 	c := &AtMostConstraint{
-		mutableConstraint: mutableConstraint{
+		MutableConstraintBase: MutableConstraintBase{
 			constraintID: constraintID,
 			kind:         ConstraintKindAtMost,
 			properties:   map[string]interface{}{},
@@ -335,7 +335,7 @@ func (constraint *AtMostConstraint) Merge(other deppy.Constraint) error {
 	} else if !ok {
 		return deppy.ConflictErrorf("cannot merge constraints of different kind [%T != %T]", constraint, other)
 	}
-	return constraint.mutableConstraint.Merge(other)
+	return constraint.MutableConstraintBase.Merge(other)
 }
 
 func (constraint *AtMostConstraint) Apply(lm deppy.LitMapping, _ deppy.Identifier) z.Lit {

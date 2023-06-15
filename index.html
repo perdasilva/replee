@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Web Terminal</title>
+    <link rel="stylesheet" href="https://unpkg.com/xterm/css/xterm.css" />
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #303030;
+        }
+        #terminal {
+            width: 80%;
+            height: 80%;
+            padding: 20px;
+            background-color: #1e1e1e;
+            color: #ffffff;
+            border-radius: 5px;
+        }
+        .header {
+            text-align: center;
+            color: #ffffff;
+            font-size: 20px;
+            margin-bottom: 10px;
+        }
+        .window-controls {
+            display: flex;
+            justify-content: flex-end;
+        }
+        .window-controls button {
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 20px;
+            margin-left: 10px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+<div id="terminal">
+    <div class="header">
+        <div class="window-controls">
+            <button>&#9744;</button> <!-- Maximize button -->
+            <button>&times;</button> <!-- Close button -->
+        </div>
+        replee >
+    </div>
+    <div id="terminal-container"></div>
+</div>
+<script src="https://unpkg.com/xterm"></script>
+<script src="https://unpkg.com/xterm-addon-fit"></script>
+<script src="js/wasm_exec.js"></script>
+<script src="js/terminal.js"></script>
+</body>
+</html>

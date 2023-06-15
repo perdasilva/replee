@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/perdasilva/replee/pkg/deppy"
 	"github.com/perdasilva/replee/pkg/deppy/solver"
 )
@@ -27,6 +28,14 @@ func (s *Solution) MarshalJSON() ([]byte, error) {
 		Selection: s.selection,
 		Problem:   s.problem,
 	})
+}
+
+func (s *Solution) String() string {
+	str, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		return fmt.Sprintf("error marshaling solution: %s", err)
+	}
+	return string(str)
 }
 
 func (s *Solution) UnmarshalJSON(jsonBytes []byte) error {

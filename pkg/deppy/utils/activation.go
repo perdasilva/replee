@@ -104,7 +104,6 @@ func (a *ActivationSet[T]) Activate(keys ...T) {
 		if _, ok := a.values[key]; !ok {
 			a.add(key)
 		}
-		a.values[key].Activate()
 	}
 }
 

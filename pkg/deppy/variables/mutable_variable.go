@@ -79,6 +79,14 @@ func NewMutableVariable(variableID deppy.Identifier, kind string, properties map
 	}
 }
 
+func (v *MutableVariable) String() string {
+	str, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return fmt.Sprintf("error marshaling variable: %s", err)
+	}
+	return string(str)
+}
+
 func (v *MutableVariable) GetProperties() map[string]interface{} {
 	v.lock.RLock()
 	defer v.lock.RUnlock()
@@ -201,6 +209,7 @@ func (v *MutableVariable) AddDependency(constraintID deppy.Identifier, dependent
 	if _, ok := v.constraints.GetValue(constraintID); !ok {
 		dep := constraints.Dependency(constraintID, dependentVariableIDs...)
 		v.constraints.Put(constraintID, dep)
+		return nil
 	}
 
 	if d, ok := v.constraints.MustGet(constraintID).(*constraints.DependencyConstraint); !ok {
@@ -234,8 +243,12 @@ func (v *MutableVariable) RemoveDependency(constraintID deppy.Identifier, depend
 	if d, ok := v.constraints.MustGet(constraintID).(*constraints.DependencyConstraint); !ok {
 		return deppy.FatalError(fmt.Sprintf("constraint with id %s is not a Dependency constraint", constraintID))
 	} else {
-		for _, dependentVariableID := range dependentVariableIDs {
-			d.Deactivate(dependentVariableID)
+		if len(dependentVariableIDs) == 0 {
+			v.constraints.Deactivate(constraintID)
+		} else {
+			for _, dependentVariableID := range dependentVariableIDs {
+				d.Deactivate(dependentVariableID)
+			}
 		}
 	}
 
@@ -253,6 +266,7 @@ func (v *MutableVariable) AddAtMost(constraintID deppy.Identifier, n int, variab
 	if _, ok := v.constraints.GetValue(constraintID); !ok {
 		atMost := constraints.AtMost(constraintID, n, variableIDs...)
 		v.constraints.Put(constraintID, atMost)
+		return nil
 	}
 
 	if a, ok := v.constraints.MustGet(constraintID).(*constraints.AtMostConstraint); !ok {
@@ -275,7 +289,11 @@ func (v *MutableVariable) RemoveAtMost(constraintID deppy.Identifier, variableID
 	if a, ok := v.constraints.MustGet(constraintID).(*constraints.AtMostConstraint); !ok {
 		return deppy.FatalError(fmt.Sprintf("constraint with id %s is not an AtMost constraint", constraintID))
 	} else {
-		a.Deactivate(variableIDs...)
+		if len(variableIDs) == 0 {
+			v.constraints.Deactivate(constraintID)
+		} else {
+			a.Deactivate(variableIDs...)
+		}
 	}
 	return nil
 }
@@ -340,7 +358,7 @@ func (v *MutableVariable) UnmarshalJSON(jsonBytes []byte) error {
 	v.constraints = utils.NewActivationMap[deppy.Identifier, deppy.Constraint]()
 	for _, constraintID := range data.Constraints.Keys() {
 		constraintBytes, _ := data.Constraints.GetValue(constraintID)
-		mc := constraints.NewMutableConstraint(nil)
+		mc := &constraints.MutableConstraintBase{}
 		if err := json.Unmarshal(constraintBytes, mc); err != nil {
 			return err
 		}
