@@ -5,10 +5,20 @@ WebAssembly.instantiateStreaming(fetch('js/main.wasm'), go.importObject).then(as
     inst = result.instance;
     go.run(inst);
 
-    var term = new Terminal();
+    var term = new Terminal({
+        theme: {
+            foreground: '#00FF00', // Matrix green
+        },
+        cursorBlink: true,
+        cursorStyle: 'bar',
+        fontFamily: 'monospace',
+        fontSize: 16,
+        fontWeight: 'normal',
+    });
     var fitAddon = new FitAddon.FitAddon();
     term.loadAddon(fitAddon);
     term.open(document.getElementById('terminal-container'));
+    term.focus()
     fitAddon.fit();
 
     var commandHistory = [];
@@ -16,7 +26,13 @@ WebAssembly.instantiateStreaming(fetch('js/main.wasm'), go.importObject).then(as
     var currentLine = '';
     var cursorPosition = 0;
 
-    term.write('replee > ');
+    function printPrompt() {
+        term.write('\r\033[Kreplee: ' + currentLine);
+        term.write('\033[' + (currentLine.length - (cursorPosition + 1)) + 'D'); // Move the cursor back to the correct position
+    }
+
+
+    printPrompt();
 
     term.onKey(e => {
         const printable = !e.domEvent.altKey && !e.domEvent.altGraphKey && !e.domEvent.ctrlKey && !e.domEvent.metaKey;
@@ -24,10 +40,9 @@ WebAssembly.instantiateStreaming(fetch('js/main.wasm'), go.importObject).then(as
             term.writeln('');
             let command = currentLine;
             commandHistory.push(command);
-            commandIndex = commandHistory.length;// Assuming replee is the function exposed by your wasm library
-            let result = window.replee(command); // Assuming replee is the function exposed by your wasm library
+            commandIndex = commandHistory.length;
+            let result = window.replee(command);
             if (result.startsWith('Error: Unexpected end of input')) {
-                // Add an indentation to the next line
                 currentLine = '    ';
                 cursorPosition = 4;
             } else {
@@ -43,37 +58,30 @@ WebAssembly.instantiateStreaming(fetch('js/main.wasm'), go.importObject).then(as
                 commandIndex--;
                 currentLine = commandHistory[commandIndex];
                 cursorPosition = currentLine.length;
-                term.write('\r\033[Kreplee > ' + currentLine);
             }
         } else if (e.domEvent.keyCode === 40) { // Down arrow key
             if (commandIndex < commandHistory.length - 1) {
                 commandIndex++;
                 currentLine = commandHistory[commandIndex];
                 cursorPosition = currentLine.length;
-                term.write('\r\033[Kreplee > ' + currentLine);
             }
         } else if (e.domEvent.keyCode === 8) { // Backspace key
             if (cursorPosition > 0) {
                 currentLine = currentLine.substring(0, cursorPosition - 1) + currentLine.substring(cursorPosition);
                 cursorPosition--;
-                term.write('\r\033[Kreplee > ' + currentLine);
-                term.write('\033[' + (currentLine.length - cursorPosition) + 'D'); // Move the cursor back to the correct position
             }
         } else if (e.domEvent.keyCode === 37) { // Left arrow key
             if (cursorPosition > 0) {
                 cursorPosition--;
-                term.write('\033[D'); // Move the cursor to the left
             }
         } else if (e.domEvent.keyCode === 39) { // Right arrow key
             if (cursorPosition < currentLine.length) {
                 cursorPosition++;
-                term.write('\033[C'); // Move the cursor to the right
             }
         } else if (printable) {
-            currentLine = currentLine.substring(0, cursorPosition) + e.key + currentLine.substring(cursorPosition);
+            currentLine = currentLine.substring(0, cursorPosition + 1) + e.key + currentLine.substring(cursorPosition + 1);
             cursorPosition++;
-            term.write('\r\033[Kreplee > ' + currentLine);
-            term.write('\033[' + (currentLine.length - cursorPosition) + 'D'); // Move the cursor back to the correct position
         }
+        printPrompt();
     });
 });

@@ -14,16 +14,29 @@
         #terminal {
             width: 80%;
             height: 80%;
-            padding: 20px;
+            padding: 5px;
             background-color: #1e1e1e;
             color: #ffffff;
             border-radius: 5px;
+            display: flex;
+            flex-direction: column;
+        }
+        #terminal-container {
+            flex-grow: 1;
+            overflow: auto;
         }
         .header {
             text-align: center;
             color: #ffffff;
             font-size: 20px;
             margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header > div:first-child {
+            flex-grow: 1;
+            text-align: center;
         }
         .window-controls {
             display: flex;
@@ -42,11 +55,11 @@
 <body>
 <div id="terminal">
     <div class="header">
+        <div>Replee></div>
         <div class="window-controls">
             <button>&#9744;</button> <!-- Maximize button -->
             <button>&times;</button> <!-- Close button -->
         </div>
-        replee >
     </div>
     <div id="terminal-container"></div>
 </div>
