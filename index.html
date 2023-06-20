@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Web Terminal</title>
-    <link rel="stylesheet" href="https://unpkg.com/xterm/css/xterm.css" />
+    <title>Replee Term</title>
+    <script src="js/wasm_exec.js"></script>
+    <link rel="stylesheet" href="js/termstyle.css">
     <style>
         body {
             display: flex;
@@ -20,10 +21,6 @@
             border-radius: 5px;
             display: flex;
             flex-direction: column;
-        }
-        #terminal-container {
-            flex-grow: 1;
-            overflow: auto;
         }
         .header {
             text-align: center;
@@ -50,6 +47,16 @@
             margin-left: 10px;
             cursor: pointer;
         }
+        #terminal-container {
+            font-family: monospace;
+            flex-grow: 1;
+            overflow: auto;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        pre {
+            width: 100%;
+        }
     </style>
 </head>
 <body>
@@ -61,11 +68,8 @@
             <button>&times;</button> <!-- Close button -->
         </div>
     </div>
-    <div id="terminal-container"></div>
+    <pre id="terminal-container"></pre>
 </div>
-<script src="https://unpkg.com/xterm"></script>
-<script src="https://unpkg.com/xterm-addon-fit"></script>
-<script src="js/wasm_exec.js"></script>
-<script src="js/terminal.js"></script>
+<script src="js/tcell.js"></script>
 </body>
 </html>

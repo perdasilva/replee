@@ -17,11 +17,12 @@ func BootstrapRepleeVM(ctx context.Context, vm *goja.Runtime) error {
 	}
 
 	return vm.Set("deppy", map[string]interface{}{
-		"build":                    reflect.ValueOf(resolution.NewResolutionProblemBuilder),
-		"newProblem":               resolution.NewMutableResolutionProblem,
-		"newVariable":              variables.NewMutableVariable,
-		"solve":                    solveWrapper,
-		"id":                       reflect.ValueOf(deppy.Identifierf),
-		"newVariableSourceBuilder": NewVariableSourceBuilder(ctx, vm),
+		"newResolutionProblemBuilder": resolution.NewResolutionProblemBuilder,
+		"newProblem":                  resolution.NewMutableResolutionProblem,
+		"newVariable":                 variables.NewMutableVariable,
+		"solve":                       solveWrapper,
+		"ctx":                         context.Background,
+		"id":                          reflect.ValueOf(deppy.Identifierf),
+		"newVariableSourceBuilder":    NewVariableSourceBuilder(ctx, vm),
 	})
 }
