@@ -50,16 +50,54 @@ func (v *VariableSourceBuilder) WithUpdateFn(call goja.FunctionCall) goja.Value 
 	return v.vm.ToValue(v)
 }
 
-func (v *VariableSourceBuilder) WithFinalizeFn(finalizeFunc func(problem deppy.MutableResolutionProblem) error) *VariableSourceBuilder {
+func (v *VariableSourceBuilder) WithFinalizeFn(call goja.FunctionCall) goja.Value {
+	cb, ok := goja.AssertFunction(call.Argument(0))
+	if !ok {
+		return v.vm.ToValue(fmt.Errorf("first argument is not a function"))
+	}
+
 	v.builder.WithFinalizeFn(func(ctx context.Context, problem deppy.MutableResolutionProblem) error {
-		return finalizeFunc(problem)
+		// Call the passed function.
+		p := v.vm.ToValue(problem)
+		ret, err := cb(nil, p)
+		if err != nil {
+			return err
+		}
+		if goja.IsNull(ret) || goja.IsUndefined(ret) {
+			return nil
+		}
+		errString, ok := ret.Export().(string)
+		if !ok {
+			return fmt.Errorf("expected string return value")
+		}
+		return fmt.Errorf(errString)
 	})
-	return v
+	return v.vm.ToValue(v)
 }
 
-func (v *VariableSourceBuilder) WithVariableFilterFn(variableSourceFilterFn deppy.VarFilterFn) *VariableSourceBuilder {
-	v.builder.WithVariableFilterFn(variableSourceFilterFn)
-	return v
+func (v *VariableSourceBuilder) WithVariableFilterFn(call goja.FunctionCall) goja.Value {
+	cb, ok := goja.AssertFunction(call.Argument(0))
+	if !ok {
+		return v.vm.ToValue(fmt.Errorf("first argument is not a function"))
+	}
+
+	v.builder.WithVariableFilterFn(func(input deppy.Variable) bool {
+		// Call the passed function.
+		jsInput := v.vm.ToValue(input)
+		ret, err := cb(nil, jsInput)
+		if err != nil {
+			return false
+		}
+		if goja.IsNull(ret) || goja.IsUndefined(ret) {
+			return false
+		}
+		out, ok := ret.Export().(bool)
+		if !ok {
+			return false
+		}
+		return out
+	})
+	return v.vm.ToValue(v)
 }
 
 func (v *VariableSourceBuilder) Build() *VariableSourceWithContext {

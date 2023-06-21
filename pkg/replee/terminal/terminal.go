@@ -26,6 +26,7 @@ type RepleeTerminal struct {
 	execute             func(string) *Output
 	onChange            func()
 	currentIndent       int
+	scrollOffset        int
 }
 
 const (
@@ -56,16 +57,20 @@ func NewRepleeTerminal(app *tview.Application, repl func(string) *Output) *Reple
 		onChange:            func() {},
 	}
 	inputField.SetInputCapture(out.handleKeyPush)
+	inputField.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		return action, nil
+	})
 	out.Flex.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-		if action != tview.MouseMove {
-			return action, event
+		if action == tview.MouseScrollUp {
+			out.lineIndex -= 1
+			out.scrollOffset = -1
+		} else if action == tview.MouseScrollDown {
+			out.lineIndex += 1
+			out.scrollOffset = 1
 		}
 		return action, event
 	})
 	out.AddItem(inputField, 0, 1, true)
-	out.SetDrawFunc(func(screen tcell.Screen, x, y, width, height int) (int, int, int, int) {
-		return inputField.GetInnerRect()
-	})
 	return out
 }
 
@@ -88,32 +93,53 @@ func (r *RepleeTerminal) addLineHistory(line lineHistoryEntry) {
 	}
 }
 
+func (r *RepleeTerminal) Draw(screen tcell.Screen) {
+	r.render()
+	r.Flex.Draw(screen)
+}
+
 func (r *RepleeTerminal) render() {
-	r.Clear()
 	_, _, _, maxRows := r.Flex.GetRect()
 	numInputLines := len(strings.Split(r.inputField.GetText(), "\n"))
-	r.lineIndex = len(r.lineHistory) - (maxRows - numInputLines)
+	maxRows = maxRows - numInputLines
 	if r.lineIndex < 0 {
 		r.lineIndex = 0
+		return
 	}
-	for i := r.lineIndex; i < len(r.lineHistory); i++ {
-		line := r.lineHistory[i]
-		commandView := tview.NewTextView().
-			SetChangedFunc(r.onChange).
-			SetDynamicColors(true).
-			SetText(line.text)
-
-		if line.lineType == lineTypePrompt {
-			commandView.SetLabel(prompt)
+	if r.lineIndex+maxRows > len(r.lineHistory) {
+		r.lineIndex = len(r.lineHistory) - maxRows
+		if r.lineIndex < 0 {
+			r.lineIndex = 0
 		}
-
-		r.AddItem(commandView, 1, 1, false)
 	}
-	r.inputField.SetText("", true)
-	r.AddItem(r.inputField, 0, 1, true)
+	r.Clear()
+	if maxRows < len(r.lineHistory) && r.scrollOffset == 0 {
+		r.lineIndex = len(r.lineHistory) - maxRows
+	}
+	for i := r.lineIndex; i <= r.lineIndex+maxRows && i <= len(r.lineHistory); i++ {
+		if i == len(r.lineHistory) {
+			r.AddItem(r.inputField, 0, 1, true)
+		} else {
+			line := r.lineHistory[i]
+			commandView := tview.NewTextView().
+				SetChangedFunc(r.onChange).
+				SetDynamicColors(true).
+				SetText(line.text)
+
+			if line.lineType == lineTypePrompt {
+				commandView.SetLabel(prompt)
+			}
+			r.AddItem(commandView, 1, 1, false)
+		}
+	}
+	r.scrollOffset = 0
 }
 
 func (r *RepleeTerminal) handleKeyPush(event *tcell.EventKey) *tcell.EventKey {
+	if event.Key() == tcell.KeyRune && event.Rune() == ' ' && event.Modifiers() == tcell.ModAlt {
+		return nil
+	}
+
 	if event.Key() == tcell.KeyUp {
 		o, _, _, _ := r.inputField.GetCursor()
 		if o > 0 {
@@ -151,7 +177,6 @@ func (r *RepleeTerminal) handleKeyPush(event *tcell.EventKey) *tcell.EventKey {
 		command := r.inputField.GetText()
 		if command == "clear" {
 			r.lineHistory = []lineHistoryEntry{}
-			r.render()
 			return nil
 		}
 		if strings.TrimSpace(command) == "" {
@@ -171,6 +196,10 @@ func (r *RepleeTerminal) handleKeyPush(event *tcell.EventKey) *tcell.EventKey {
 					return nil
 				}
 			}
+			r.currentIndent -= 2
+			if r.currentIndent < 0 {
+				r.currentIndent = 0
+			}
 			r.inputField.SetText(fmt.Sprintf("%s\n", command), true)
 			return nil
 		}
@@ -178,7 +207,7 @@ func (r *RepleeTerminal) handleKeyPush(event *tcell.EventKey) *tcell.EventKey {
 		if result.IsErr {
 			color = "[red]"
 		}
-		output := fmt.Sprintf("%s%s[white]", color, strings.TrimSpace(result.Output))
+		output := strings.Trim(result.Output, " \n\t")
 		if r.commandHistoryIndex == 0 {
 			r.commandHistory = append(r.commandHistory, command)
 		}
@@ -186,6 +215,7 @@ func (r *RepleeTerminal) handleKeyPush(event *tcell.EventKey) *tcell.EventKey {
 		r.currentIndent = 0
 
 		r.RemoveItem(r.inputField)
+		r.inputField.SetText("", true)
 		for index, line := range strings.Split(command, "\n") {
 			if index == 0 {
 				r.addLineHistory(lineHistoryEntry{
@@ -200,18 +230,14 @@ func (r *RepleeTerminal) handleKeyPush(event *tcell.EventKey) *tcell.EventKey {
 			}
 		}
 		for _, line := range strings.Split(output, "\n") {
-			r.addLineHistory(lineHistoryEntry{
-				lineType: lineTypeOutput,
-				text:     fmt.Sprintf("%s%s[white]", color, line),
-			})
+			if line != "" {
+				r.addLineHistory(lineHistoryEntry{
+					lineType: lineTypeOutput,
+					text:     fmt.Sprintf("%s%s[white]", color, line),
+				})
+			}
 		}
-		r.render()
 		return nil
-	}
-	if event.Key() == tcell.KeyLeft || event.Key() == tcell.KeyRight {
-		go func() {
-			r.app.ForceDraw()
-		}()
 	}
 	return event
 }

@@ -10,17 +10,18 @@ import (
 )
 
 type ReplUI struct {
-	app      *tview.Application
-	terminal *terminal.RepleeTerminal
-	vm       *goja.Runtime
+	app  *tview.Application
+	main *tview.Pages
+	vm   *goja.Runtime
 }
 
 func NewReplUI(app *tview.Application, vm *goja.Runtime) *ReplUI {
 	ui := &ReplUI{
-		app: app,
-		vm:  vm,
+		app:  app,
+		main: tview.NewPages(),
+		vm:   vm,
 	}
-	ui.terminal = terminal.NewRepleeTerminal(app, ui.execute)
+	ui.main.AddPage("replee", terminal.NewRepleeTerminal(app, ui.execute), true, true)
 	return ui
 }
 
@@ -57,7 +58,7 @@ func main() {
 	app := tview.NewApplication().SetScreen(terminal.NewScreen())
 	ui := NewReplUI(app, vm)
 
-	if err := app.SetRoot(ui.terminal, true).EnableMouse(true).SetFocus(ui.terminal).Run(); err != nil {
+	if err := app.SetRoot(ui.main, true).EnableMouse(true).SetFocus(ui.main).Run(); err != nil {
 		panic(err)
 	}
 }
