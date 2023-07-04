@@ -18,20 +18,20 @@ func TestOrder(t *testing.T) {
 	for _, tt := range []tc{
 		{
 			Name:       "mandatory",
-			Constraint: constraints.Mandatory(),
+			Constraint: constraints.Mandatory("a"),
 		},
 		{
 			Name:       "prohibited",
-			Constraint: constraints.Prohibited(),
+			Constraint: constraints.Prohibited("a"),
 		},
 		{
 			Name:       "dependency",
-			Constraint: constraints.Dependency("a", "b", "c"),
+			Constraint: constraints.Dependency("dcid", "a", "b", "c"),
 			Expected:   []deppy.Identifier{"a", "b", "c"},
 		},
 		{
 			Name:       "conflict",
-			Constraint: constraints.Conflict("a"),
+			Constraint: constraints.Conflict("cid", "a"),
 		},
 	} {
 		t.Run(tt.Name, func(t *testing.T) {

@@ -100,13 +100,18 @@ func (m *MutableResolutionProblem) ActivateVariable(v deppy.MutableVariable) err
 		if vr.Kind() != v.Kind() {
 			return fmt.Errorf("variable %s is not of kind %s", v.Identifier(), v.Kind())
 		}
-		if err := vr.Merge(v); err != nil {
+		_, err := vr.Merge(v)
+		if err != nil {
 			return err
 		}
 	} else {
 		m.variables.Put(v.Identifier(), v)
 	}
-	m.variables.Activate(v.Identifier())
+	if activated, err := m.variables.IsActivated(v.Identifier()); err != nil {
+		return err
+	} else if !activated {
+		m.variables.Deactivate(v.Identifier())
+	}
 	return nil
 }
 

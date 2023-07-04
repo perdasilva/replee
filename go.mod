@@ -8,9 +8,12 @@ require (
 	github.com/go-air/gini v1.0.4
 	github.com/rivo/tview v0.0.0-00010101000000-000000000000
 	github.com/stretchr/testify v1.8.3
+	github.com/wk8/go-ordered-map/v2 v2.1.8
 )
 
 require (
+	github.com/bahlo/generic-list-go v0.2.0 // indirect
+	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dlclark/regexp2 v1.7.0 // indirect
 	github.com/gdamore/encoding v1.0.0 // indirect
@@ -18,6 +21,7 @@ require (
 	github.com/google/pprof v0.0.0-20230207041349-798e818bf904 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
+	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-runewidth v0.0.14 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.3 // indirect
